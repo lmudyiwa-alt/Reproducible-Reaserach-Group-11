@@ -62,11 +62,11 @@ original_project_python/
     Original implementation in Python (reference version)
 
 new_project_r/
-    R implementation of the project
-    - functions/   # reusable helper functions
-    - notebooks/   # main analysis pipeline (R scripts/notebooks)
-    - outputs/     # saved models and results
-    - plots/       # generated visualizations
+R implementation of the project
+- functions/   # reusable helper functions
+- notebooks/   # main analysis pipeline (R scripts/notebooks)
+- outputs/     # saved models and results
+- plots/       # generated visualizations
 
 renv.lock
     Dependency lockfile for reproducibility
