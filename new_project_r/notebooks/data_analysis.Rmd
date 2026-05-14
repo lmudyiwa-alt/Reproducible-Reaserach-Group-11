@@ -1,0 +1,284 @@
+---
+title: "Project Classification in R - module 1: Data_analysis"
+author: "Jakub Tomczak"
+date: "2026-05-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **Car Insurance Claims Prediction**
+
+The project concerns the prediction of insurance claims reported in relation to various vehicles covered by insurance policies.
+
+The data comes from Kaggle from a dataset called *Insurance Claims Dataset*, <https://www.kaggle.com/datasets/litvinenko630/insurance-claims>. This dataset contains nearly 60,000 observations, each observation refers to a single policy and contains detailed attributes related to the vehicle (such as engine power, fuel type, and the presence of various safety systems), as well as characteristics of the policy and the policyholder (such as policy duration, driver age, and region of residence).
+
+The dataset addresses a key problem in the field of insurance risk assessment and fraud detection: predicting the likelihood of a claim being filed. Understanding which factors contribute to a higher likelihood of a claim allows insurance companies to price premiums more accurately, develop fairer risk models, and improve overall profitability. In addition, such predictive modeling can help insurers promote safer driving behaviors and identify high-risk policies early on.
+
+**The aim of the project is to forecast insurance claims as accurately as possible using selected machine learning models.** Three models were selected:
+
+-   Random Forest
+
+-   XGBoost
+
+-   Ensembling of three models with the Stacking selection method.
+
+The project has the following structure: data analysis and cleaning, then feature engineering and feature selection, followed by training each model and tuning hyperparameters, and finally testing the models on a test set and comparing the results. To this end, the project has been divided into 5 appropriate modules (R Markdown files) to increase its readability and simplify code handling.
+
+## **1. Data cleaning and data analysis**
+
+In this section, a preliminary analysis of the data (distribution of variables, correlations between them) will be performed, and the dataset will be cleaned of unnecessary variables and missing values. The dataset will also be adapted for further analysis—division into training and test sets (while maintaining reproducibility of research) and encoding of categorical variables.
+
+```{r, message=FALSE, warning=FALSE}
+# loading all necessary libraries
+
+library(here)
+library(kableExtra)
+library(rsample)
+library(dplyr)
+library(fastDummies)
+library(ggcorrplot)
+library(ggplot2)
+library(readr)
+source(here::here("new_project_r", "functions", "bar_plot_generator.R"))
+```
+
+```{r}
+# Setting seed for reproducibility 
+
+set.seed(123)
+```
+
+#### Loading data and splitting it into train and test datasets
+
+```{r, warning=FALSE}
+data <- read.csv(here("data", "Insurance_claims_data.csv"))
+```
+
+```{r}
+split <- initial_split(data, prop = 0.8)
+data_train <- training(split)
+data_test  <- testing(split)
+
+cat("\nTRAIN:\n")
+print(head(data_train))
+cat("SHAPE:", paste(dim(data_train), collapse = " "))
+
+cat("\n\nTEST:\n")
+print(head(data_test))
+cat("SHAPE:", paste(dim(data_test), collapse = " "))
+```
+
+#### Data cleaning
+
+```{r}
+str(data_train)
+```
+
+Checking for missing values
+
+```{r}
+missing_stats <- colMeans(is.na(data_train)) * 100
+print(missing_stats)
+```
+
+##### **We want to deleate not significant features like policy_id which has different value for each observation, so it doesn't add any more information to the dataset**
+
+```{r}
+features_to_remove <- c("policy_id", "region_code", "engine_type")
+data_train <- data_train %>% select(-all_of(features_to_remove))
+data_test  <- data_test  %>% select(-all_of(features_to_remove))
+```
+
+#### **Encoding object type variables:**
+
+For that we use one hot encoding
+
+```{r}
+
+data_new <- data_train
+data_test_new <- data_test
+
+# 2. One-Hot Encoding for train set
+
+data_new <- dummy_cols(data_new, 
+                     remove_selected_columns = TRUE, 
+                     ignore_na = TRUE)
+
+cat("Frequency of data type (TRAIN):\n")
+print(table(sapply(data_new, class)))
+
+# 3. One-Hot Encoding for test set
+data_test_new <- dummy_cols(data_test_new, 
+                          remove_selected_columns = TRUE, 
+                          ignore_na = TRUE)
+
+cat("\nFrequency of data type (TEST):\n")
+print(table(sapply(data_test_new, class)))
+```
+
+### Data analysis 
+
+#### **Distribution of target variable**
+
+```{r}
+data_new %>% count(claim_status)
+```
+
+Our data set is therefore highly unbalanced, as positive claims account for only 6% of all claims.
+
+#### **Basic data statistics and corelations between continous variables**
+
+```{r}
+data_continous <- data_train %>% select(where(is.numeric))
+
+summary(data_continous)
+```
+
+```{r}
+# Creating corelation matrix
+corr_matrix <- cor(data_continous, method = "spearman")
+
+foo <- as.data.frame(as.table(corr_matrix)) %>%
+  rename(Var1 = Var1, Var2 = Var2, corr_val = Freq) %>%
+  
+  filter(as.character(Var1) < as.character(Var2)) %>%
+  mutate(abs_corr = abs(corr_val)) %>%
+  arrange(desc(abs_corr))
+
+
+head(foo, 10)
+```
+
+```{r}
+# Plot creation
+p <- ggcorrplot(
+  corr_matrix, 
+  hc.order = FALSE,           
+  type = "full",              
+  lab = TRUE,                 
+  lab_size = 2,               
+  digits = 3,                 
+  outline.color = "white",    
+  colors = c("#6D9EC1", "white", "#E46726") 
+) +
+  theme(axis.text.x = element_text(size = 12, angle = 90),
+        axis.text.y = element_text(size = 12))
+
+# 3. Plot display
+print(p)
+```
+
+Some continuous variables are strongly correlated with each other, while there is virtually no correlation between certain variables.
+
+```{r}
+# Saving plot
+plot_path <- here("new_project_r", "plots", "correlation_heatmap_plot.png")
+
+ggsave(
+  filename = plot_path,
+  plot = p,
+  width = 15,    
+  height = 15,   
+  dpi = 300      
+)
+```
+
+#### **Distributions of some of categorical variables (before encoding)**
+
+```{r}
+segment_plot <- bar_plot_generator(data_train, "segment")
+```
+
+```{r}
+# Saving plot
+plot_path <- here("new_project_r", "plots", "segment_barplot.png")
+
+ggsave(
+  filename = plot_path,
+  plot = segment_plot,
+  width = 15,    
+  height = 15,   
+  dpi = 300      
+)
+```
+
+```{r}
+model_plot <- bar_plot_generator(data_train, "model")
+```
+
+```{r}
+# Saving plot
+plot_path <- here("new_project_r", "plots", "model_barplot.png")
+
+ggsave(
+  filename = plot_path,
+  plot = model_plot,
+  width = 15,    
+  height = 15,   
+  dpi = 300      
+)
+```
+
+```{r}
+fuel_type_plot <- bar_plot_generator(data_train, "fuel_type")
+```
+
+```{r}
+# Saving plot
+plot_path <- here("new_project_r", "plots", "fuel_type_barplot.png")
+
+ggsave(
+  filename = plot_path,
+  plot = fuel_type_plot,
+  width = 15,    
+  height = 15,   
+  dpi = 300      
+)
+```
+
+```{r}
+is_parking_camera_plot <- bar_plot_generator(data_train, "is_parking_camera")
+```
+
+```{r}
+# Saving plot
+plot_path <- here("new_project_r", "plots", "is_parking_camera_barplot.png")
+
+ggsave(
+  filename = plot_path,
+  plot = is_parking_camera_plot,
+  width = 15,    
+  height = 15,   
+  dpi = 300      
+)
+```
+
+```{r}
+is_brake_assist_plot <- bar_plot_generator(data_train, "is_brake_assist")
+```
+
+```{r}
+# Saving plot
+plot_path <- here("new_project_r", "plots", "is_brake_assist_barplot.png")
+
+ggsave(
+  filename = plot_path,
+  plot = is_brake_assist_plot,
+  width = 15,    
+  height = 15,   
+  dpi = 300      
+)
+```
+
+### **Saving cleand  train and test datasets**
+
+```{r}
+write.csv(data_new, here("data", "data_cleaned.csv"), row.names = FALSE)
+```
+
+```{r}
+write.csv(data_test_new, here("data", "data_test_cleaned.csv"), row.names = FALSE)
+```
