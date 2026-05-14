@@ -24,21 +24,22 @@ renv::restore()
 ## How to run
 Run the project step by step using notebooks from the new_project_r/notebooks directory in recommended order:
 
-1. Data loading and preprocessing
-2. Feature engineering and feature selection
+1. Data loading and preprocessing - data_analysis.Rmd
+2. Feature engineering and feature selection - feature_engineering.Rmd 
 3. Model training:
-- Random Forest
-- XGBoost
-4. Model ensembling using stacking
-5. Model evaluation and comparison
+- Random Forest - Random_Forest.Rmd
+- XGBoost - XGBoost.Rmd
+4. Model ensembling using stacking - Stacking.Rmd
+5. Model evaluation and comparison - model_evaluation.Rmd
 
 ## Expected output
 Trained models saved in new_project_r/outputs/
 Processed datasets saved in data/
 Visualizations saved in new_project_r/plots/
-Performance metrics comparing models
+Performance metrics comparing models in model_evaluation.Rmd
 
 Estimated runtime: 
+?
 
 ## Data
 The dataset comes from Kaggle:
@@ -49,8 +50,8 @@ https://www.kaggle.com/datasets/litvinenko630/insurance-claims
 Each row represents an insurance policy
 Includes vehicle features (e.g., engine power, fuel type), driver attributes, and policy details
 
-Data is stored locally in the data/ folder - file: 
-it can be alse downloaded manually from Kaggle before running the project
+Data is stored locally in the data/ folder - file: Insurance_claims_data.csv
+it can be also downloaded manually from Kaggle before running the project
 
 ## Repository structure
 
