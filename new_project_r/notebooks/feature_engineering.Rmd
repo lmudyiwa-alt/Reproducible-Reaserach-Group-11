@@ -1,0 +1,466 @@
+---
+title: "Project Classification in R - module 2: Feature_Engineering"
+author: "Jakub Tomczak"
+date: "2026-05-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## **2. Feature engineering and feature selection**
+
+In this part, the feature engineering process will be carried out. For this purpose, the distributions of variable data were compared to assess whether a variable requires transformation (the process is carried out only for numerical variables). Next, the feature selection process was carried out using selected methods in order to reject the least significant variables and create groups of variables that best explain the dependent variable.
+
+```{r, message=FALSE, warning=FALSE}
+# loading all necessary libraries
+
+library(here)
+library(kableExtra)
+library(rsample)
+library(dplyr)
+library(fastDummies)
+library(ggcorrplot)
+library(ggplot2)
+library(FSelectorRcpp)
+library(Boruta)
+library(ranger)
+source(here::here("new_project_r", "functions", "compare_plot_generator.R"))
+source(here::here("new_project_r", "functions", "save_plot.R"))
+```
+
+Loading data
+
+```{r}
+data <- read.csv(here("data", "data_cleaned.csv"))
+data_test <- read.csv(here("data", "data_test_cleaned.csv"))
+```
+
+```{r}
+kable(head(data))
+```
+
+### **Feature engeenering - numerical variables** 
+
+##### **subscription_length**
+
+```{r}
+subscription_length_fe_plots <- compare_plot_generator(data, 'subscription_length')
+```
+
+```{r}
+subscription_length_hist <- subscription_length_fe_plots$histograms
+subscription_length_box <- subscription_length_fe_plots$boxplot
+save_plot(subscription_length_hist)
+save_plot(subscription_length_box)
+```
+
+```{r}
+data$subscription_length_sqrt <- sqrt(data$subscription_length)
+data_test$subscription_length_sqrt <- sqrt(data_test$subscription_length)
+```
+
+```{r}
+subscription_length_sqrt_fe_plots <- compare_plot_generator(data, 'subscription_length_sqrt')
+```
+
+```{r}
+subscription_length_sqrt_hist <- subscription_length_sqrt_fe_plots$histograms
+subscription_length_sqrt_box <- subscription_length_sqrt_fe_plots$boxplot
+save_plot(subscription_length_sqrt_hist)
+save_plot(subscription_length_sqrt_box)
+```
+
+##### **vehicle_age**
+
+```{r}
+vehicle_age_fe_plots <- compare_plot_generator(data, 'vehicle_age')
+```
+
+```{r}
+vehicle_age_hist <- vehicle_age_fe_plots$histograms
+vehicle_age_box <- vehicle_age_fe_plots$boxplot
+save_plot(vehicle_age_hist)
+save_plot(vehicle_age_box)
+```
+
+```{r}
+data <- data %>%
+  mutate(vehicle_age_cut = pmin(vehicle_age, quantile(vehicle_age, 0.99, na.rm = TRUE)))
+data_test <- data_test %>%
+  mutate(vehicle_age_cut = pmin(vehicle_age, quantile(vehicle_age, 0.99, na.rm = TRUE)))
+```
+
+```{r}
+vehicle_age_cut_fe_plots <- compare_plot_generator(data, 'vehicle_age_cut')
+```
+
+```{r}
+vehicle_age_cut_hist <- vehicle_age_cut_fe_plots$histograms
+vehicle_age_cut_box <- vehicle_age_cut_fe_plots$boxplot
+save_plot(vehicle_age_cut_hist)
+save_plot(vehicle_age_cut_box)
+```
+
+##### **customer_age**
+
+```{r}
+customer_age_fe_plots <- compare_plot_generator(data, 'customer_age')
+```
+
+```{r}
+customer_age_hist <- customer_age_fe_plots$histograms
+customer_age_box <- customer_age_fe_plots$boxplot
+save_plot(customer_age_hist)
+save_plot(customer_age_box)
+```
+
+```{r}
+data$customer_age_log <- sqrt(data$customer_age)
+data_test$customer_age_log <- sqrt(data_test$customer_age)
+```
+
+```{r}
+customer_age_log_plots <- compare_plot_generator(data, 'customer_age_log')
+```
+
+```{r}
+customer_age_log_hist <- customer_age_log_plots$histograms
+customer_age_log_box <- customer_age_log_plots$boxplot
+save_plot(customer_age_log_hist)
+save_plot(customer_age_log_box)
+```
+
+##### **region_density**
+
+```{r}
+region_density_fe_plots <- compare_plot_generator(data, 'region_density')
+```
+
+```{r}
+region_density_hist <- region_density_fe_plots$histograms
+region_density_box <- region_density_fe_plots$boxplot
+save_plot(region_density_hist)
+save_plot(region_density_box)
+```
+
+```{r}
+data$region_density_sqrt <- sqrt(data$region_density)
+data_test$region_density_sqrt <- sqrt(data_test$region_density)
+```
+
+```{r}
+region_density_sqrt_plots <- compare_plot_generator(data, 'region_density_sqrt')
+```
+
+```{r}
+region_density_sqrt_hist <- region_density_sqrt_plots$histograms
+region_density_sqrt_box <- region_density_sqrt_plots$boxplot
+save_plot(region_density_sqrt_hist)
+save_plot(region_density_sqrt_box)
+```
+
+##### **airbags**
+
+```{r}
+airbags_fe_plots <- compare_plot_generator(data, 'airbags')
+```
+
+```{r}
+airbags_hist <- airbags_fe_plots$histograms
+airbags_box <- airbags_fe_plots$boxplot
+save_plot(airbags_hist)
+save_plot(airbags_box)
+```
+
+Looks like ordinal variable -\> there is no need to change it
+
+##### **displacement**
+
+```{r}
+displacement_fe_plots <- compare_plot_generator(data, 'displacement')
+```
+
+```{r}
+displacement_hist <- displacement_fe_plots$histograms
+displacement_box <- displacement_fe_plots$boxplot
+save_plot(displacement_hist)
+save_plot(displacement_box)
+```
+
+Looks like ordinal variable -\> there is no need to change it
+
+##### **cylinder**
+
+```{r}
+cylinder_fe_plots <- compare_plot_generator(data, 'cylinder')
+```
+
+```{r}
+cylinder_hist <- cylinder_fe_plots$histograms
+cylinder_box <- cylinder_fe_plots$boxplot
+save_plot(cylinder_hist)
+save_plot(cylinder_box)
+```
+
+Looks like ordinal variable -\> there is no need to change it
+
+##### **turning_radius**
+
+```{r}
+turning_radius_fe_plots <- compare_plot_generator(data, 'turning_radius')
+```
+
+```{r}
+turning_radius_hist <- turning_radius_fe_plots$histograms
+turning_radius_box <- turning_radius_fe_plots$boxplot
+save_plot(turning_radius_hist)
+save_plot(turning_radius_box)
+```
+
+Also no need to change this variable
+
+##### **length**
+
+```{r}
+length_fe_plots <- compare_plot_generator(data, 'length')
+```
+
+```{r}
+length_hist <- length_fe_plots$histograms
+length_box <- length_fe_plots$boxplot
+save_plot(length_hist)
+save_plot(length_box)
+```
+
+Also no need to change this variable
+
+##### **width**
+
+```{r}
+width_fe_plots <- compare_plot_generator(data, 'width')
+```
+
+```{r}
+width_hist <- width_fe_plots$histograms
+width_box <- width_fe_plots$boxplot
+save_plot(width_hist)
+save_plot(width_box)
+```
+
+Also no need to change this variable
+
+##### **gross_weight**
+
+```{r}
+gross_weight_fe_plots <- compare_plot_generator(data, 'gross_weight')
+```
+
+```{r}
+gross_weight_hist <- gross_weight_fe_plots$histograms
+gross_weight_box <- gross_weight_fe_plots$boxplot
+save_plot(gross_weight_hist)
+save_plot(gross_weight_box)
+```
+
+Also no need to change this variable
+
+As we can see, although the four variables above are continuous variables, they only take on a finite number of values, which makes them more similar to discrete variables. This type of variable is very good for decision tree models, so there is no reason to modify them in feature engineering process.
+
+##### **ncap_rating**
+
+```{r}
+ncap_rating_fe_plots <- compare_plot_generator(data, 'ncap_rating')
+```
+
+```{r}
+ncap_rating_hist <- ncap_rating_fe_plots$histograms
+ncap_rating_box <- ncap_rating_fe_plots$boxplot
+save_plot(ncap_rating_hist)
+save_plot(ncap_rating_box)
+```
+
+Looks like ordinal variable -\> there is no need to change it
+
+#### **Saving our modified datasets**
+
+```{r}
+print(dim(data))
+print(dim(data_test))
+```
+
+```{r}
+colnames(data)
+```
+
+```{r}
+write.csv(data, here("data", "train_fe.csv"), row.names = FALSE)
+write.csv(data_test, here("data", "test_fe.csv"), row.names = FALSE)
+```
+
+### **Feature selection**
+
+The following selection methods were chosen in the feature selection process:
+
+-   Variance Threshold
+
+-   F-test
+
+-   Correlation - Spearman
+
+-   Mutal Information
+
+-   Boruta
+
+```{r}
+x_col <- setdiff(colnames(data), "claim_status")
+```
+
+```{r}
+y_col <- 'claim_status'
+```
+
+```{r}
+general_ranking <- data.frame(feature = x_col)
+```
+
+#### **Variance Threshold**
+
+```{r}
+# It deleates all variables with variance lower than chosen threshold. Features with low variance do not carry much information for our ML models.
+
+variances <- sapply(data[x_col], var, na.rm = TRUE)
+
+col_imp <- names(variances[variances >= 0.05])
+
+col_redundant <- setdiff(x_col, col_imp)
+
+sel_var <- data[col_imp]
+```
+
+```{r}
+var_df <- data.frame(
+  feature = names(variances),
+  variance = variances
+)
+
+general_ranking <- left_join(general_ranking, var_df, by = "feature")
+```
+
+#### **F-test**
+
+```{r, warning=FALSE}
+
+p_values <- sapply(x_col, function(col) {
+  
+  formula_str <- as.formula(paste0(col, " ~ ", y_col))
+  anova_res <- aov(formula_str, data = data)
+  summary(anova_res)[[1]][["Pr(>F)"]][1]
+})
+
+fscoreDF <- data.frame(
+  p_value_score = p_values,
+  sign = ifelse(p_values < 0.05, 1, 0),
+  row.names = x_col
+)
+```
+
+```{r}
+print(head(fscoreDF[order(fscoreDF$p_value_score), ], 10))
+```
+
+```{r}
+fscoreDF$feature <- rownames(fscoreDF)
+
+fscoreDF <- fscoreDF %>%
+  rename(sign_fscore = p_value_score, sign_fscore_0_1 = sign)
+
+general_ranking <- left_join(general_ranking, fscoreDF, by = "feature")
+```
+
+#### **Correlation - Spearman**
+
+```{r}
+corr_values <- sapply(data[x_col], function(col) {
+  cor(data[[y_col]], col, method = "spearman", use = "complete.obs")
+})
+```
+
+```{r}
+corr_df <- data.frame(
+  feature = x_col,
+  corr = corr_values
+)
+
+general_ranking <- left_join(general_ranking, corr_df, by = "feature")
+```
+
+#### **Mutal Information**
+
+It measures how much information one variable provides about another - taret variable
+
+```{r}
+formula_str <- as.formula(paste(y_col, "~", paste(x_col, collapse = " + ")))
+
+data[[y_col]] <- as.factor(data[[y_col]])
+
+# 2. Mutal Information calculation
+mi_results <- information_gain(formula_str, data = data, type = "infogain")
+
+miDF <- data.frame(
+  feature = mi_results$attributes,
+  mi_score = mi_results$importance
+)
+```
+
+```{r}
+print(head(miDF[order(-miDF$mi_score), ], 10))
+```
+
+```{r}
+general_ranking <- left_join(general_ranking, miDF, by = "feature")
+```
+
+#### **Boruta**
+
+Feature selection algorithm based on Random Forests, designed to find all features that carry useful information for predicting target variable
+
+```{r}
+data[[y_col]] <- as.factor(data[[y_col]])
+
+formula_str <- as.formula(paste(y_col, "~", paste(x_col, collapse = " + ")))
+
+# Running Boruta algorythm
+boruta_output <- Boruta(
+  formula_str, 
+  data = data, 
+  maxRuns = 100, 
+  doTrace = 0      
+)
+```
+
+```{r}
+boruta_stats <- attStats(boruta_output)
+
+boruta_DF <- data.frame(
+  feature = rownames(boruta_stats),
+  boruta_rank = boruta_stats$meanImp)
+```
+
+```{r}
+general_ranking <- left_join(general_ranking, boruta_DF, by = "feature")
+```
+
+### **Summary of feature selection**
+
+```{r}
+general_ranking_sorted <- general_ranking %>%
+  arrange(desc(mi_score), desc(boruta_rank), desc(corr))
+
+kable(general_ranking_sorted)
+```
+
+```{r}
+write.csv(general_ranking_sorted, here("data", "feature_ranking.csv"), row.names = FALSE)
+```

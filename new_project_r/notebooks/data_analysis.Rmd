@@ -41,8 +41,8 @@ library(dplyr)
 library(fastDummies)
 library(ggcorrplot)
 library(ggplot2)
-library(readr)
 source(here::here("new_project_r", "functions", "bar_plot_generator.R"))
+source(here::here("new_project_r", "functions", "save_plot.R"))
 ```
 
 ```{r}
@@ -63,11 +63,11 @@ data_train <- training(split)
 data_test  <- testing(split)
 
 cat("\nTRAIN:\n")
-print(head(data_train))
+kable(head(data_train))
 cat("SHAPE:", paste(dim(data_train), collapse = " "))
 
 cat("\n\nTEST:\n")
-print(head(data_test))
+kable(head(data_test))
 cat("SHAPE:", paste(dim(data_test), collapse = " "))
 ```
 
@@ -154,7 +154,7 @@ head(foo, 10)
 
 ```{r}
 # Plot creation
-p <- ggcorrplot(
+correlation_plot <- ggcorrplot(
   corr_matrix, 
   hc.order = FALSE,           
   type = "full",              
@@ -175,15 +175,7 @@ Some continuous variables are strongly correlated with each other, while there i
 
 ```{r}
 # Saving plot
-plot_path <- here("new_project_r", "plots", "correlation_heatmap_plot.png")
-
-ggsave(
-  filename = plot_path,
-  plot = p,
-  width = 15,    
-  height = 15,   
-  dpi = 300      
-)
+save_plot(correlation_plot)
 ```
 
 #### **Distributions of some of categorical variables (before encoding)**
@@ -194,15 +186,7 @@ segment_plot <- bar_plot_generator(data_train, "segment")
 
 ```{r}
 # Saving plot
-plot_path <- here("new_project_r", "plots", "segment_barplot.png")
-
-ggsave(
-  filename = plot_path,
-  plot = segment_plot,
-  width = 15,    
-  height = 15,   
-  dpi = 300      
-)
+save_plot(segment_plot)
 ```
 
 ```{r}
@@ -211,15 +195,7 @@ model_plot <- bar_plot_generator(data_train, "model")
 
 ```{r}
 # Saving plot
-plot_path <- here("new_project_r", "plots", "model_barplot.png")
-
-ggsave(
-  filename = plot_path,
-  plot = model_plot,
-  width = 15,    
-  height = 15,   
-  dpi = 300      
-)
+save_plot(model_plot)
 ```
 
 ```{r}
@@ -228,15 +204,7 @@ fuel_type_plot <- bar_plot_generator(data_train, "fuel_type")
 
 ```{r}
 # Saving plot
-plot_path <- here("new_project_r", "plots", "fuel_type_barplot.png")
-
-ggsave(
-  filename = plot_path,
-  plot = fuel_type_plot,
-  width = 15,    
-  height = 15,   
-  dpi = 300      
-)
+save_plot(fuel_type_plot)
 ```
 
 ```{r}
@@ -245,15 +213,7 @@ is_parking_camera_plot <- bar_plot_generator(data_train, "is_parking_camera")
 
 ```{r}
 # Saving plot
-plot_path <- here("new_project_r", "plots", "is_parking_camera_barplot.png")
-
-ggsave(
-  filename = plot_path,
-  plot = is_parking_camera_plot,
-  width = 15,    
-  height = 15,   
-  dpi = 300      
-)
+save_plot(is_parking_camera_plot)
 ```
 
 ```{r}
@@ -262,15 +222,7 @@ is_brake_assist_plot <- bar_plot_generator(data_train, "is_brake_assist")
 
 ```{r}
 # Saving plot
-plot_path <- here("new_project_r", "plots", "is_brake_assist_barplot.png")
-
-ggsave(
-  filename = plot_path,
-  plot = is_brake_assist_plot,
-  width = 15,    
-  height = 15,   
-  dpi = 300      
-)
+save_plot(is_brake_assist_plot)
 ```
 
 ### **Saving cleand  train and test datasets**
