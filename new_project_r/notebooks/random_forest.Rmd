@@ -1,0 +1,404 @@
+---
+title: "Project Classification in R - module 3: Random_Forest"
+author: "Jakub Tomczak"
+date: "2026-05-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## **3. Random Forest model**
+
+In this part, the Random Forest model was implemented. First, using the feature selection criteria created in the previous part of the project, the best feature groups were selected on which the model will be trained. Next, hyperparameter tuning will be performed and the best parameters for each feature group will be selected in the cross-validation process. Finally, models for all groups will be tested on the validation set, and the final model with the best result will be selected and tested on test set. The measure chosen for evaluating models in the project is *balanced accuracy*. I decided to chose this method because our dataset is unbalanced and this measure gives equal importance to each class, instead of being dominated by the majority class.
+
+```{r, message=FALSE, warning=FALSE}
+# loading all necessary libraries
+
+library(here)
+library(kableExtra)
+library(rsample)
+library(dplyr)
+library(fastDummies)
+library(ggplot2)
+library(caret)
+library(ranger)
+source(here::here("new_project_r", "functions", "save_plot.R"))
+source(here::here("new_project_r", "functions", "random_forest_cross_val.R"))
+```
+
+```{r}
+# Setting seed for reproducibility 
+
+set.seed(123)
+```
+
+#### **Importing data and spliting train dataset into train and validation sets**
+
+```{r}
+data <- read.csv(here("data", "train_fe.csv"))
+fr <- read.csv(here("data", "feature_ranking.csv"))
+```
+
+```{r}
+set.seed(123)
+
+# Stratified dataset split
+data_split <- initial_split(data, prop = 0.8, strata = claim_status)
+
+df_res <- training(data_split)
+df_val <- testing(data_split)
+
+table(df_res$claim_status)
+```
+
+### **Choosing features for Random Forest model**
+
+#### Benchmark
+
+We select all our features as benchmark
+
+```{r}
+benchmark_input <- setdiff(colnames(df_res), "claim_status")
+```
+
+#### **Variance threshold**
+
+We select 15 features with the highest variance
+
+```{r}
+var_features <- general_ranking %>%
+  arrange(desc(variance)) %>%  
+  slice(1:15) %>%               
+  pull(feature)
+```
+
+```{r}
+var_features
+```
+
+#### **Mutal Information**
+
+```{r}
+mi_features_15 <- general_ranking %>%
+  arrange(desc(mi_score)) %>%  
+  slice(1:15) %>%               
+  pull(feature)
+```
+
+```{r}
+mi_features_15
+```
+
+```{r}
+mi_features_25 <- general_ranking %>%
+  arrange(desc(mi_score)) %>%  
+  slice(1:25) %>%               
+  pull(feature)
+```
+
+```{r}
+mi_features_25
+```
+
+#### **Boruta**
+
+We select features based on Boruta ranking - we select only features for which ranking is in 1-10
+
+```{r}
+br_features <- general_ranking %>%
+  filter(boruta_rank %in% 1:10) %>%  
+  pull(feature)
+```
+
+```{r}
+br_features <- c('subscription_length_sqrt', 'subscription_length', 'ncap_rating', 'vehicle_age', 'region_density_sqrt', 'gross_weight', 'displacement', 'width', 'region_density', 'customer_age', 'customer_age_log', 'vehicle_age_cut')
+```
+
+#### **Correlation**
+
+We select 25 featurse most correlated to target variable
+
+```{r}
+corr_features <- general_ranking %>%
+  arrange(desc(corr)) %>%  
+  slice(1:25) %>%               
+  pull(feature)
+```
+
+```{r}
+corr_features
+```
+
+#### F-test
+
+We select features with p-value \< 0.05 in F test, and then we delete features wich are correlated to much
+
+```{r}
+F_test_features <- general_ranking %>%
+  filter(sign_fscore_0_1 == 1) %>%
+  pull(feature) 
+```
+
+```{r}
+corr_matrix <- cor(df_res[F_test_features], method = "spearman", use = "pairwise.complete.obs")
+
+foo <- as.data.frame(as.table(corr_matrix)) %>%
+  rename(Var1 = Var1, Var2 = Var2, corr_val = Freq) %>%
+
+  filter(as.character(Var1) < as.character(Var2)) %>%
+  mutate(abs_corr = abs(corr_val)) %>%
+  arrange(desc(abs_corr))
+
+head(foo, 10)
+```
+
+```{r}
+general_ranking %>%
+  filter(feature %in% c("max_power_88.50bhp.6000rpm", "max_torque_113Nm.4400rpm"))
+```
+
+```{r}
+F_test_features <- F_test_features[F_test_features != "max_torque_113Nm.4400rpm"]
+```
+
+```{r}
+general_ranking %>%
+  filter(feature %in% c("subscription_length", "subscription_length_sqrt"))
+```
+
+```{r}
+F_test_features <- F_test_features[F_test_features != "subscription_length"]
+```
+
+```{r}
+general_ranking %>%
+  filter(feature %in% c("region_density", "region_density_sqrt"))
+```
+
+```{r}
+F_test_features <- F_test_features[F_test_features != "region_density_sqrt"]
+```
+
+```{r}
+general_ranking %>%
+  filter(feature %in% c("customer_age", "customer_age_log"))
+```
+
+```{r}
+F_test_features <- F_test_features[F_test_features != "customer_age"]
+```
+
+```{r}
+general_ranking %>%
+  filter(feature %in% c("vehicle_age", "vehicle_age_cut"))
+```
+
+```{r}
+F_test_features <- F_test_features[F_test_features != "vehicle_age_cut"]
+```
+
+```{r}
+F_test_features
+```
+
+### **Random forrest hyperparameters tuning:**
+
+The following function is used to tune hyperparameters in the cross-validation process for the Random Forest model. This function returns the best parameters for a given group of variables (function argument) and displays the balanced accuracy score for each parameter configuration (to better track progress and compare how changing a given parameter impacts the cross validation score). Hyperparameters we tune:
+
+-   **max_samples** - Fraction or number of training samples per tree
+
+-   **max_depth** - Maximum depth (number of splits) of each tree
+
+-   **min_samples_leaf** - Minimum number of samples required in a leaf node
+
+-   **max_features** - Number of features considered at each split
+
+-   **n_estimators** - Number of trees in the forest (I decided to not tune this parameter and leave it fixed and equal to 300, to decrease calculation time)
+
+```{r}
+best_params_benchmark <- random_forest_cross_val(
+  X_train = df_res[, benchmark_input], 
+  y_train = df_res$claim_status
+)
+```
+
+```{r}
+best_params_var <- random_forest_cross_val(
+  X_train = df_res[, var_features], 
+  y_train = df_res$claim_status
+)
+```
+
+```{r}
+best_params_mi15 <- random_forest_cross_val(
+  X_train = df_res[, mi_features_15], 
+  y_train = df_res$claim_status
+)
+```
+
+```{r}
+best_params_mi25 <- random_forest_cross_val(
+  X_train = df_res[, mi_features_25], 
+  y_train = df_res$claim_status
+)
+```
+
+```{r}
+best_params_boruta <- random_forest_cross_val(
+  X_train = df_res[, br_features], 
+  y_train = df_res$claim_status
+)
+```
+
+```{r}
+best_params_corr <- random_forest_cross_val(
+  X_train = df_res[, corr_features], 
+  y_train = df_res$claim_status
+)
+```
+
+```{r}
+best_params_Ftest <- random_forest_cross_val(
+  X_train = df_res[, F_test_features], 
+  y_train = df_res$claim_status
+)
+```
+
+### **Now as we chose best hyperparameters for each feature group we can choose best model using validation dataset**
+
+Code below calculates calculates balanced accuracy score for each feature group with best parameters for each group. Model with highest score on validation set is then chosen as our final best model for Random Forest algorithm
+
+```{r}
+feature_groups <- list(
+  "benchmark_input" = benchmark_input,
+  "var_features"    = var_features,
+  "mi_features_15"  = mi_features_15,
+  "mi_features_25"  = mi_features_25,
+  "br_features"     = br_features,
+  "corr_features"   = corr_features,
+  "F_test_features" = F_test_features
+)
+
+
+rf_params <- list(
+  "benchmark_input"  = list(max.depth = 5, min.node.size = 1, mtry = 47, sample.fraction = 0.8),
+  "var_features"     = list(max.depth = 5, min.node.size = 10,  mtry = 7, sample.fraction = 1),
+  "mi_features_15"   = list(max.depth = 5, min.node.size = 5,  mtry = 7, sample.fraction = 0.6),
+  "mi_features_25"   = list(max.depth = 5, min.node.size = 1,  mtry = 5, sample.fraction = 0.6), 
+  "br_features"     = list(max.depth = 5, min.node.size = 1,  mtry = 6, sample.fraction = 0.6),
+  "corr_features"  = list(max.depth = 5, min.node.size = 10,  mtry = 4, sample.fraction = 0.6),
+  "F_test_features" = list(max.depth = 5, min.node.size = 5,  mtry = 12, sample.fraction = 1)
+)
+
+balanced_accuracy_summary <- function(data, lev = NULL, model = NULL) {
+  lvls <- levels(data$obs)
+  cm <- confusionMatrix(data$pred, data$obs, positive = lvls[2])
+  out <- cm$byClass["Balanced Accuracy"]
+  names(out) <- "Balanced_Accuracy"
+  out
+}
+
+control <- trainControl(
+  method = "cv",
+  number = 5,
+  summaryFunction = balanced_accuracy_summary,
+  classProbs = TRUE,
+  verboseIter = FALSE
+)
+
+y_factor <- as.factor(paste0("class_", df_res$claim_status))
+
+class_counts <- table(y_factor)
+weights <- ifelse(y_factor == names(class_counts)[1], 
+                  sum(class_counts) / (2 * class_counts[1]), 
+                  sum(class_counts) / (2 * class_counts[2]))
+
+best_group <- NULL
+best_score <- 0
+results <- list()
+
+for (name in names(feature_groups)) {
+  features <- feature_groups[[name]]
+  params <- rf_params[[name]]
+  
+  X_subset <- df_res[, features, drop = FALSE]
+  
+  
+  grid <- expand.grid(
+    mtry = params$mtry,
+    splitrule = "gini",
+    min.node.size = params$min.node.size
+  )
+  
+  set.seed(123)
+  model_cv <- train(
+    x = X_subset,
+    y = y_factor,
+    method = "ranger",
+    num.trees = 300,
+    tuneGrid = grid,
+    trControl = control,
+    metric = "Balanced_Accuracy",
+    weights = weights,
+    num.threads = parallel::detectCores(),
+    max.depth = params$max.depth,
+    sample.fraction = params$sample.fraction
+  )
+  
+  mean_score <- max(model_cv$results$Balanced_Accuracy, na.rm = TRUE)
+  results[[name]] <- mean_score
+  
+  cat(sprintf("Feature group: %s, Balanced Accuracy (CV): %.4f\n", name, mean_score))
+  
+  if (mean_score > best_score) {
+    best_score = mean_score
+    best_group = name
+    best_model = model_cv
+  }
+}
+
+cat(sprintf("\nBest group: %s with CV score: %.4f\n", best_group, best_score))
+```
+
+#### **Fitting and saving best model**
+
+Best feature group: mi_features_25, parameters: {'max_depth': 5, 'min.node.size': 1, 'mtry': 5, 'sample.fraction': 0.6}
+
+```{r}
+y_factor <- as.factor(paste0("class_", df_res$claim_status))
+
+class_counts <- table(y_factor)
+weights <- ifelse(y_factor == names(class_counts)[1], 
+                  sum(class_counts) / (2 * class_counts[1]), 
+                  sum(class_counts) / (2 * class_counts[2]))
+
+
+set.seed(123) 
+best_model <- ranger(
+  x               = df_res[, benchmark_input],
+  y               = y_factor,
+  num.trees       = 300,        
+  splitrule       = "gini",     
+  max.depth       = 5,          
+  min.node.size   = 1,         
+  sample.fraction = 0.6,
+  mtry            = 5,
+  case.weights    = weights,    
+  num.threads     = parallel::detectCores(), 
+  probability     = TRUE        
+)
+```
+
+#### Saving model
+
+```{r}
+output_dir <- file.path(here("new_project_r", "outputs"))
+
+
+model_path <- file.path(output_dir, "random_forest_model.rds")
+saveRDS(best_model, file = model_path)
+
+cat(paste("Model saved successfully in:", model_path, "\n"))
+```

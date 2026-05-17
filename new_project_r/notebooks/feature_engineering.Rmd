@@ -30,7 +30,13 @@ source(here::here("new_project_r", "functions", "compare_plot_generator.R"))
 source(here::here("new_project_r", "functions", "save_plot.R"))
 ```
 
-Loading data
+```{r}
+# Setting seed for reproducibility 
+
+set.seed(123)
+```
+
+#### Loading data
 
 ```{r}
 data <- read.csv(here("data", "data_cleaned.csv"))
@@ -438,6 +444,12 @@ boruta_output <- Boruta(
   maxRuns = 100, 
   doTrace = 0      
 )
+```
+
+```{r}
+print(boruta_output)
+
+head(attStats(boruta_output))
 ```
 
 ```{r}
